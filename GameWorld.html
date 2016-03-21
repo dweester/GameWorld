@@ -1,0 +1,1594 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8"> 
+<meta name="viewport" content="width=320, initial-scale=1">
+<!-- DOCUMENTATION: 
+	WORLDGAME IS A GAME THAT WILL CONTAIN INTERACTIVE CHARACTERS,
+	AND THOSE CHARACTERS WILL BE ABLE TO INTERACT WITH OBJECTS AND EACH OTHER.
+	THE CHARACTERS WILL BE ABLE TO MOVE THROUGH A 2-D GRID.
+	
+	OBJECTS USED IN THIS GAME:
+	* World -- A SINGLE, INVISIBLE CONTAINER OF LOCATIONS.
+	* World.locations -- AN ARRAY OF NAMED ELEMENTS WHICH WILL CONTAIN OBJECTS, AND MAYBE TERRAIN INFORMATION
+	* Gameboard -- A SINGLE, VISIBLE REPRESENTATION OF ALL THE LOCATIONS IN THE WORLD.
+	    (THE GOAL IS TO SHOW A PARTIAL PORTION OF THE LARGER WORLD, THE PART THAT WOULD BE VISIBLE TO THE PLAYER
+	* objects -- AN ARRAY OF ALL THE DIFFERENT TYPE OF OBJECTS IN THE WORLD.
+	    THE DIFFERENT TYPES OF OBJECTS MIGHT BE:
+		*  player
+		*  characters
+		*  tools (OBJECTS THAT THE CHARACTERS CAN USE TO PERFORM VARIOUS INTERACTIONS)
+		*  landmarks (BIG OBJECTS THAT OCCUPY ENTIRE World.locations AND CANNOT BE WALKED THROUGH:
+		   ROCKS, TREES, GARDENS, TRASH HEAPS, BODIES OF WATER.
+		   THESE MAY ALSO INCLUDE TYPES OF BUILDINGS:
+		     HOMES, OFFICES, WORK PLACES
+		*  vehicles -- THESE MIGHT INCLUDE FASTER MODES OF TRANSPORTATION OR EMPLOYMENT-RELATED OBJECTIVES:
+		   RIDE A BIKE, FLY A HELICOPTER, DRIVE A CAB, DRIVE A BUS, RIDE A BUS
+	* requests -- (PENDING) ARRAY OF TASKS THAT CHARACTERS INTEND TO PERFORM, OR OTHER CHARACTERS CAN CHOOSE TO PERFORM FOR ONE ANOTHER
+-->
+<!-- STYLESHEET -->
+<style>
+	body {
+		padding:0px;
+		margin:0px;
+		background-color:white;
+	}
+	#everything {
+		text-align:center;
+		margin:2em auto;
+		position:relative;
+		border:1px solid orange;
+		width:100%;
+		height:100%;
+	}
+	#myCanvas {
+		position:absolute;
+		margin:0em auto; 
+		display:block; 
+		top:0px; 
+		left:0px; 
+		z-index:-1; 
+		border:1px solid cyan;
+	}
+	#main {
+		position: absolute;
+		border:1px dotted gray;
+		width:100%;
+		text-align:center;
+		position:absolute;
+		min-width:100%;
+		border:1px solid violet;
+	}
+	.boardSquare {
+		width:32px;
+		height:32px;
+		display:inline-block;
+		border:1px dashed lightgray;
+		border-width:1px 0px 0px 1px;
+		overflow:hidden;
+		vertical-align:top;
+		position:relative;
+	}
+	.character {
+		position:relative;
+		top:2px;
+		left:2px;
+		/*transform:rotate(-90deg);*/
+	}
+	#score {
+		border:1px solid gray; 
+		margin:.5em auto;
+		text-align:center;
+		font:bold 1em arial,helvetica,sans-serif;
+		height:30px;
+		width:350px;
+
+	}
+	.obstacle {
+		backgroundColor: beige;
+	}
+	.healthMeter {
+		width:16px;
+		border:1px solid #cccccc;
+		border-width:0px 1px 1px 1px;
+		margin:0px auto;
+		position:relative;
+		top:0px;
+		left:2px;
+		z-index:3;
+		background-color:white;
+		height:2px;
+	}
+	.tool {
+		position:absolute;
+		top:0px;
+		left:0px;
+	}
+</style>
+
+
+<!-- SETUP SCRIPT -->
+<script>
+	// TEST BACKGROUND COLORS
+	function randomBackground() {
+		var tempColor = "red";
+		var rgb1 = Math.floor(Math.random() * 256);
+		var rgb2 = Math.floor(Math.random() * 256);
+		var rgb3 = Math.floor(Math.random() * 256);
+		 var tempColor = "rgb(" + rgb1.toString() + "," + rgb2.toString() + "," + rgb3.toString() + ")";
+		 //window.alert(tempColor);
+		document.body.style.backgroundColor = tempColor;
+	}
+	
+	console.log("-- begin scripts --");
+	/* 
+	GLOBAL ARRAYS
+		objects[]
+	
+	-- World --
+		create()
+		checkBoundaries()
+		doTap(boardLocationObject)
+		updateObjectsAt(location,objectsArray)
+		insertObjectAtLocation(objectSent,location);
+		removeObjectFromLocation(objectSent,location)
+	
+	-- Character -- (USE AS PROTOTYPE)
+		display()
+		getLocation()
+		setOldLocation(x,y)
+		getOldLocation()
+		setFacing()
+		update()
+	
+	-- Gameboard -- 
+		display()
+		updateLocationDisplay(location)
+	
+	GLOBAL FUNCTIONS
+	
+		moveRandom(objectSent)
+		function moveUDLRTowardTarget(objectSent,target)
+		function createAllCharacters()
+		createCharacter (type,name,x,y,gifBaseFilename)
+		setStatus(textSent)
+		
+	*/
+	
+	// SETUP SOUNDS
+	/* html5_audiotypes={ //define list of audio file extensions and their associated audio types. Add to it if your specified audio file isn't on this list:
+		"mp3": "audio/mpeg",
+		"mp4": "audio/mp4",
+		"ogg": "audio/ogg",
+		"wav": "audio/wav"
+	}
+
+	function createsoundbite(sound){
+		try {
+			var html5audio=document.createElement('audio')
+			if (html5audio.canPlayType){ //check support for HTML5 audio
+				for (var i=0; i<arguments.length; i++){
+					var sourceel=document.createElement('source')
+					sourceel.setAttribute('src', arguments[i])
+					if (arguments[i].match(/\.(\w+)$/i))
+						sourceel.setAttribute('type', html5_audiotypes[RegExp.$1])
+					html5audio.appendChild(sourceel)
+				}
+				html5audio.load()
+				html5audio.playclip=function(){
+					html5audio.pause()
+					html5audio.currentTime=0
+					html5audio.play()
+				}
+				return html5audio
+			}
+			else{
+				return {playclip:function(){throw new Error("Your browser doesn't support HTML5 audio unfortunately")}}
+			}
+		}
+		catch (e) {
+			console.log("createsoundbite() " + e);
+		}
+	}
+	var playMoveSound=createsoundbite(soundFolder + soundEffects.steps);
+	*/
+	
+	
+	// SETUP WORLD
+	objects = [];
+	var World = {
+		height:10,
+		width:10,
+		locations:new Object(),
+		create: function(widthSent,heightSent) {
+			this.width = widthSent;
+			this.height = heightSent;
+			//setInterval(randomBackground,2000);
+			var counter =0;
+			var output = "";
+			for (var i=0; i<this.height; i++) {
+				for (var j=0; j<this.width;j++) {
+					var newName = "x" + j + "y" + i;
+					output += newName + "\n";
+					this.locations[newName] = {x:j,y:i,name:newName,getContents:function() {return this.contents}};
+					this.locations[newName].contents = new Array();
+					counter++;
+				}
+			}
+			// setStatus(output);
+		},
+		checkBoundaries: function(objectSent) {
+			//console.log("@ World.checkBoundaries");
+			var tempLocation = "x" + objectSent.x + "y" + objectSent.y;
+			// CHECK BOUNDARIES OF OBJECT IN WORLD
+			var outOfBounds = false;
+			if (objectSent.x < 0) {
+				objectSent.x = 0;
+				outOfBounds="w";
+				tempLocation = "x0y" + objectSent.y;
+			}
+			else if (objectSent.x > this.width -1) {
+				objectSent.x = this.width-1;
+				outOfBounds="e";
+				tempLocation = "x" + objectSent.x + "y" + this.width -1;
+			}
+			if (objectSent.y < 0) {
+				//console.log(objectSent.name + " out of bounds: Y=" + objectSent.y);
+				objectSent.y = 0;
+				outOfBounds="n";
+				tempLocation = "x" + objectSent.x + "y0";
+				// window.alert(tempLocation);
+				//document.getElementById(tempLocation).style.borderTopColor = "red";
+			}
+			else if (objectSent.y > this.height -1) {
+				//console.log(objectSent.name + " out of bounds: Y=" + objectSent.y);
+				objectSent.y = this.height -1;
+				outOfBounds="s";
+				tempLocation = "x" + objectSent.x + "y" + this.height -1;
+			}
+			return outOfBounds;
+			// console.log(objectSent);
+			// Gameboard.updateLocationDisplay(objectSent.getLocation());
+		},
+		getArrayOfObjectsAtLocation: function (location) {
+			// console.log("@ getArrayOfObjectsAtLocation: " + location);
+			// FUNCTION RETURNS ARRAY OF ANY OBJECT IDS FOUND AT LOCATION
+			var outputArray = [];
+			// var objectsArray = new Array();
+			var blockingObjectTypes = ["character","obstacle"];
+			for(i=0; i< this.locations[location].contents.length; i++) {
+				//console.log(this.locations[location].contents[i]);
+				if (this.locations[location].contents[i].id > -1) {
+					//console.log("STEP 1");
+					//if (this.locations[location].contents[i].type == "prize") {
+					// IF THIS TYPE IS IN NOT THE ARRAY OF TYPES THAT BLOCK
+					outputArray.push (this.locations[location].contents[i].id);
+					// console.log("this.locations[location].contents[i].id: " + this.locations[location].contents[i].id);
+				}
+			}
+			// console.log("outputArray.length: " + outputArray.length);
+			return outputArray;
+		},
+		checkForBlockagesAtLocation:function (location) {
+			// FUNCTION RETURNS ID OF ANY OBJECTS THAT BLOCKS ENTERING OF LOCATION
+			var reply = "";
+			// var objectsArray = new Array();
+			var tempType = "";
+			var blockingObjectTypes = ["character","obstacle","plant"];
+			for(i=0; i< this.locations[location].contents.length; i++) {
+				if (this.locations[location].contents[i].id > -1) {
+					tempType = this.locations[location].contents[i].type;
+					//if (this.locations[location].contents[i].type == "prize") {
+					// IF THIS TYPE IS IN NOT THE ARRAY OF TYPES THAT BLOCK
+					if (blockingObjectTypes.indexOf(tempType) > -1) {
+						reply += (this.locations[location].contents[i].id).toString() + "|";
+					}
+				}
+			}
+			return reply;
+		},
+		checkForSpecialsAtLocation:function (location) {
+			// FUNCTION RETURNS ID OF ANY OBJECTS THAT ARE OF TYPE "special" AT LOCATION
+			// console.log("@ checkForSpecialsAtLocation " + location);
+			var reply = "";
+			// var objectsArray = new Array();
+			var tempType = "";
+			// var specialObjectTypes = ["special"];
+			for(i=0; i< this.locations[location].contents.length; i++) {
+				if (this.locations[location].contents[i].id > -1) {
+					tempType = this.locations[location].contents[i].type;
+					// console.log(tempType);
+					if (tempType == "special") {
+						reply += (this.locations[location].contents[i].id).toString();
+						break;
+					}
+				}
+			}
+			return reply;
+		},
+		doTap: function (boardLocationObject) {
+			var output = "";
+			//setStatus("CONTENTS AT THIS LOCATION: " + boardLocationObject.id + " -- " + this.locations[boardLocationObject.id].contents[0].name);
+			// this.locations[boardLocationObject.id].contents = this.locations[boardLocationObject.id].contents.splice(0,1);
+			//setStatus("CONTENTS 2 AT THIS LOCATION: " + boardLocationObject.id + " -- " + this.locations[boardLocationObject.id].contents[0].name);
+
+			//console.log("@ World.doTap (" + boardLocationObject.id + ")");
+	
+			boardLocationObject.style.backgroundColor = "lightBlue";
+			setTimeout(function() { boardLocationObject.style.backgroundColor = "transparent" },1000);
+			//setStatus(World.checkForBlockagesAtLocation(boardLocationObject.id));
+			var tempArray = [];
+			// tempArray = this.getArrayOfNearbyObjects(boardLocationObject.id,3)
+			// console.log("ARRAY OF " + tempArray.length + " NEARBY OBJECTS: " + tempArray);
+			tempArray = this.getArrayOfObjectsAtLocation(boardLocationObject.id);
+			
+			tempArray.forEach(function(objectId) {
+				console.log(objectId);
+				output += objects[objectId].print();
+			});
+			setStatus(output);
+			// AT SOME POINT HAVE THE player OBJECT GO TO THE SELECTED DESTINATION
+			//objectsSent.destination = boardLocationObject.id;
+			var boundingClientRectArray = boardLocationObject.getBoundingClientRect();
+			appendStatus(boundingClientRectArray.top,boundingClientRectArray.right, boundingClientRectArray.bottom, boundingClientRectArray.left)
+		},
+		updateObjectsAt:function (location,objects) {
+			//console.log("@ World.updateObjectsAt");
+			// WIPE OUT CONTENTS OF LOCATION AND REFILL WITH CURRENT OBJECTS
+			var i=0;
+			var output = "";
+			for (var object of objects) {
+				// console.log("getObjectsAt:" + object.getLocation() + " vs. " + location);
+				this.locations[location].contents = [];
+				if (object.getLocation() == location) {
+					this.locations[location].contents.push(object);
+				}
+			}
+			return output;
+		},
+		removeObjectFromLocation(objectSent,location) {
+			//console.log("@ World.removeObjectFromLocation (" + objectSent.name + ", " + location + ")");
+			for(i=0; i< this.locations[location].contents.length; i++) {
+				if (this.locations[location].contents[i].id == objectSent.id) {
+					//console.log(this.locations[location].contents);	
+					//console.log("Length of .contents Before Splice = " + this.locations[location].contents.length);
+					//console.log("> Splice out - this.locations[" + location + "].contents.splice(" + i + ",1)");
+					this.locations[location].contents.splice([i],1);
+					//console.log("Length of .contents After Splice = " + this.locations[location].contents.length);
+					//console.log(this.locations[location].contents);
+					//setStatus(this.locations[location].contents.map(function (e) { return e.name }));
+					//window.alert(location);
+				}
+			}
+		},
+		insertObjectAtLocation(objectSent,location) {
+			//console.log("@ World.insertObjectAtLocation (" + objectSent.name + ", " + location + ")");
+			this.locations[location].contents.push(objectSent);
+		},
+		relocate: function(objectSent) {
+			var done = false;
+			do {
+				objectSent.setOldLocation(objectSent.x,objectSent.y);
+				var newX = Math.floor(Math.random() * this.width);
+				var newY = Math.floor(Math.random() * this.height);
+				//if (World.checkForBlockagesAtLocation("x" + newX + "y" + newY) == false) {
+				if (World.getArrayOfObjectsAtLocation("x" + newX + "y" + newY).length == 0) {
+					this.moveObject(objectSent,newX,newY);
+					done = true;
+				}
+			} while(done == false);
+		},
+		moveObject: function(objectSent,newX,newY) {
+			//console.log("ID:" + objectSent.id + " NEW: newX=" + newX + ", newY=" + newY + " OLD: " + objectSent.getOldLocation() );
+			// SET NEW LOCATION X, Y
+				objectSent.setOldLocation(objectSent.x,objectSent.y);
+				// console.log("ID:" + objectSent.id + " NEW: newX=" + newX + ", newY=" + newY + " NEW oldLocation: " + objectSent.getOldLocation() );
+				//console.log("setOldLocation: " + objectSent.x + " " +objectSent.y);
+				//console.log("getOldLocation: " + objectSent.getOldLocation());
+				objectSent.x = newX;
+				objectSent.y = newY;
+				//console.log(objectSent.getLocation())
+				//console.log(newX + " " + newY);
+				//console.log("object_" + objectSent.id);
+				//console.log(objectSent.getLocation());
+				// DELETE OBJECT FROM OLD LOCATION
+				World.removeObjectFromLocation(objectSent,objectSent.getOldLocation());
+				// REDRAW OLD LOCATION
+				gameboard.updateLocationDisplay(objectSent.getOldLocation());
+				// INSERT OBJECT INTO NEW LOCATION
+				World.insertObjectAtLocation(objectSent,objectSent.getLocation());
+				// REDRAW NEW LOCATION
+				gameboard.updateLocationDisplay(objectSent.getLocation());
+		},
+		checkForCollision: function(objectSent,targetSent){
+			var output = false;
+			if (objectSent.getLocation() == targetSent.getLocation()) {
+				output = true;
+			}
+			return output;
+		},
+		getArrayOfNearbyObjects: function(location,radiusSent) {
+			//console.log("@ getArrayOfNearbyObjects: " + location + " radius: " + radiusSent);
+			var outputArray = [];
+			var arrayOfLocations;
+			var locationArray = this.getXYUsingLocation(location);
+			var radius = 1;
+			if (radiusSent > 0) {
+				radius = radiusSent;
+			}
+			var tempLocation="";
+			if (locationArray != false) { 		
+				//console.log(location + " > x,y = " + locationArray);
+				var x = Number(locationArray[0]);
+				var y = Number(locationArray[1]);
+				var testX=0;
+				var testY =0;
+				var outputArray=[];
+				var tempDiff=0;
+				var arrayOfObjectsAtLocation = [];
+				// GET LOCATIONS NEXT TO LOCATION
+				// tempRadius =1;
+				for (var xDiff= -(radius); xDiff <= radius; xDiff++) {
+					for (var yDiff= -(radius); yDiff <= radius; yDiff++) {
+						testX = (x+xDiff);
+						testY = (y+yDiff);
+						tempLocation = "x" + testX + "y" + testY;
+						if (testX >= 0 && testY >= 0 && testX < this.width && testY < this.height) {
+							//if (tempLocation != location) {
+								// console.log("tempLocation: " + tempLocation);
+								if (isInCircle(x,y,testX,testY,radius)) {
+									//document.getElementById(tempLocation).style.backgroundColor = "pink";
+									arrayOfObjectsAtLocation = (this.getArrayOfObjectsAtLocation(tempLocation));
+									// SORT IN RANDOM ORDER
+									arrayOfObjectsAtLocation.sort(function() {return 0.5 - Math.random()});
+									//for (var tempRadius =0; tempRadius <= radius; tempRadius++) {
+										if (arrayOfObjectsAtLocation.length > 0) {
+											// THIS LOOP IS (PROBABLY) BECAUSE THERE CAN BE MORE THAN ONE OBJECT AT EACH LOCATION
+									// console.log("outputArray.length: " + arrayOfObjectsAtLocation.length);
+											for (j = 0; j < arrayOfObjectsAtLocation.length; j++) {
+												outputArray.push({id:arrayOfObjectsAtLocation[j], distance:Math.ceil(this.distanceBetweenCoordinates(x,y,testX,testY))});
+											}
+										}
+									//}
+								}
+								// console.log("tempRadius " + radius);
+							//}
+						}
+					}
+				}
+			}
+			return outputArray;
+		},
+		distanceBetweenCoordinates: function(x,y,testX,testY) {
+			var distance = 0;
+			// distance = Math.sqrt((Math.pow(x-testX)^2) + Math.pow((y-testY),2));
+			distance = Math.sqrt((x -= testX) * x + (y -= testY) * y);
+			return distance;
+		},
+		getXYUsingLocation: function(location) {
+			// console.log(location);
+			var output = false;
+			var tempX = -1;
+			var tempY = -1;
+			var locationParts = location.split("y");
+			if (locationParts.length == 2){
+				tempY = locationParts[1];
+				tempX = locationParts[0].substring(1);
+				output = [tempX,tempY];
+			}
+			return output;
+		}
+	}
+	function isInCircle(centerX,centerY,checkX,checkY,radius) {
+		var distance = Math.sqrt(Math.pow(centerX - checkX, 2) + Math.pow(centerY - checkY, 2));
+		if (distance <= radius) {
+		  
+		  var result = true;
+		}
+		return result;
+	}
+	
+	Gameboard = {
+		display: function() {
+		// console.log("@ Gameboard.display");
+			var output = "";
+			// NOTE: THIS LINE Object.keys(obj).length ONLY WORKS WITH ECMASCRIPT 5-COMPATIBLE BROWSERS
+			for (var i=0; i < World.height; i++) {
+				for (var j=0; j< World.width;j++) {
+					var tempSymbols="";
+					tempID = "x" + j + "y" + i;
+					for (var k=0; k< World.locations[tempID].contents.length;k++) {
+						tempSymbols = World.locations[tempID].contents[k].display() + "<br />";
+					}
+					output += "<div id=\"" + World.locations[tempID].name + "\" class=\"boardSquare\" onclick=\"World.doTap(this)\" >" + tempSymbols + "</div>";
+				}
+				output += "<br />";
+			}
+			//console.log(World.locations);
+			// return output;
+			document.getElementById("main").innerHTML = "<div id=\"gameboard\">" + output + "<div style=\"clear:both;\"></div></div>";
+			// window.alert(output);
+		},
+		updateLocationDisplay: function(location) {
+			// console.log("@ Gameboard.updateLocationDisplay(" + location + ")" );
+			var output = "";	
+			//console.log("LOCATION TO COLOR:" + location);
+			try {
+			// document.getElementById(location).style.backgroundColor ="pink";
+				//output += World.getObjectsAt(location);
+				output = "";
+				//console.log(World.locations[location].contents);
+				//console.log("World.locations[" + location + "].contents count:" + World.locations[location].contents.length);
+				for (var i = 0; i < World.locations[location].contents.length; i++) {
+					output += World.locations[location].contents[i].getSymbol();
+					// console.log("> Loop #" + i  + " thru World.locations[" + location + "].contents - World.locations[location].contents[" + i + "]");
+				}
+				// output = "Test";
+				document.getElementById(location).innerHTML = output;
+			}
+			catch (e) {
+				console.log("error:" + location + " -- " + e);
+			}
+			return output;
+		}
+	}
+	var Tool = {
+		id:0,
+		type:"tool",
+		name:"none",
+		x:0,
+		y:0,
+		oldX: 0,
+		oldY:0,
+		symbol:"X",
+		getSymbol: function () {
+			return this.symbol;
+		},
+		display:function() {
+			return this.getSymbol();
+		},
+		getLocation:function() {
+			return "x" + this.x + "y" + this.y;
+		},
+		setOldLocation:function(x,y) {
+			this.oldX = x;
+			this.oldY = y;
+		},
+		getOldLocation:function() {
+			return "x" + this.oldX + "y" + this.oldY;
+		},
+		print:function() {
+			var output = "";
+			output += "id: " + this.id + "<br />";
+			output += "name: " + this.name + "<br />";
+			output += "symbol: " + this.symbol + "<br />";
+			output += "type: " + this.type + "<br />";
+			output += "location: " + this.getLocation() + "<br />";
+			return output;
+		}
+	}
+	
+	// THIS IS A PROTOTYPE FOR CREATING LOTS OF CREATURE CHARACTERS
+	var Character = {
+		id:0,
+		type:"character",
+		species:"humanoid",
+		name:"none",
+		health:100,
+		healthAdjusted:75,
+		cash:0,
+		symbolFront:"F",
+		symbolBack:"B",
+		symbol:"X",
+		tool:0,
+		getSymbol: function () {
+			var output = "";
+			this.setFacing();
+			if (this.facing == "n") {
+				this.symbol = this.symbolBack;
+			}
+			else {
+				this.symbol = this.symbolFront;
+			}
+			if (this.type == "character") {
+				output += this.getHealthMeter();
+			}
+			output += this.symbol;
+			
+			return output;
+		},
+		symbolDead:"X",
+		x:0,
+		y:0,
+		facing:"s",
+		oldX: 0,
+		oldY:0,
+		foods:["plant","food"],
+		destination:"",
+		print:function () {
+			var output = "";
+			output += "id: " + this.id + "<br />\n";
+			output += "type: " + this.type + "<br />\n";
+			output += "name: " + this.name + "<br />\n";
+			output += "destination: " + this.destination + "<br />\n";
+			output += "health: " + this.healthAdjusted + "/" + this.health + "<br />\n";
+			output += "cash: " + this.cash + "<br />\n";
+			output += "symbol: " + this.getSymbol() + "<br />\n";
+			output += "facing: " + this.facing + "<br />\n";
+			output += "x: " + this.x + "<br />\n";
+			output += "y: " + this.y + "<br />\n";
+			output += "oldX: " + this.oldX + "<br />\n";
+			output += "oldY: " + this.oldY + "<br />\n";
+			output += "getLocation: " + this.getLocation() + "<br />\n";
+			output += "getOldLocation: " + this.getOldLocation() + "<br />\n";
+			output += "setFacing(): " + this.setFacing() + "<br />\n";
+			return output;
+		},
+		display:function() {
+			//console.log("@ Character.display");
+			//if (this.hitpoints > 0) {
+				var output = "";
+				output = this.getSymbol();
+				return output;
+			/*}
+			else {
+				return this.symbolDead;
+			}*/
+		},
+		getHealthMeter: function() {
+			var output = "";
+			var tempPercentage = ((this.healthAdjusted/this.health)*100);
+			var tempColor = "#00cc00";
+			if (tempPercentage <20) {
+				tempColor = "#ff0000";
+			} 
+			else if (tempPercentage<50) {
+				tempColor = "#ff9900";
+			}
+			
+			output = "<div class=\"healthMeter\"><div  id=\"health_" + this.id + "\" style=\"background-color:" + tempColor + "; height:2px; width:" + tempPercentage +"%;)\"></div></div>";
+			// console.log(output);
+			return output;
+		},
+		/*relocate: function() {
+			this.oldLocation = this.getLocation();
+			do {
+				this.x = Math.floor(Math.random() * gameboard.width);
+				this.y = Math.floor(Math.random() * gameboard.height);
+			} while (checkForStaticBlocks(this,staticObjects) == true);
+		},*/
+		getLocation:function() {
+			return "x" + this.x + "y" + this.y;
+		},
+		setOldLocation:function(x,y) {
+			this.oldX = x;
+			this.oldY = y;
+		},
+		getOldLocation:function() {
+			return "x" + this.oldX + "y" + this.oldY;
+		},
+		setFacing:function() {
+			if (this.type == "obstacle") {
+				this.facing="s";
+			}
+			else {
+				if(this.oldY < this.y) {
+					this.facing="s";
+				}
+				else if(this.oldY > this.y) {
+					this.facing="n";
+				}
+				else if(this.oldX > this.x) {
+					this.facing="e";
+				}
+				else if(this.oldX < this.x) {
+					this.facing="w";
+				}
+			}
+		},
+		update:function() {
+			this.setFacing();
+		},
+		adjustHealthBy(valueSent) {
+			this.healthAdjusted += valueSent;
+			if (this.healthAdjusted < 0) {
+				this.healthAdjusted = 0;
+			}
+			else if (this.healthAdjusted > this.health) {
+				this.healthAdjusted = this.health;
+			}
+		}
+	}
+	
+	Specials = {
+		doAction(objectId,specialId) {
+			console.log("@ Specials.doAction");
+			switch(objects[specialId].name) {
+				case "teleporter": 
+					World.relocate(objects[objectId]);
+					// document.getElementById("object_" + objects[objectId].id).style.backgroundColor = "#6699ff";
+					var everythingLeft = document.getElementById("everything").offsetLeft ;
+					var everythingTop = document.getElementById("everything").offsetTop ;
+					var objectRect = document.getElementById("object_" + objects[objectId].id).getBoundingClientRect();
+					var pointX = Math.floor(objectRect.right- (objectRect.right-objectRect.left)/2) - everythingLeft;
+					var pointY = Math.floor(objectRect.bottom- (objectRect.bottom-objectRect.top)/2) - everythingTop;
+					var dudArray=[];
+					for (var i=1;i<=3; i++) {
+						drawCircle(pointX, pointY, (40-(10*i)),"blue",1,false);
+						setTimeout(drawCircle, (200+(i*200)),pointX, pointY, (40-(10*i)),"white",3,false);
+					}
+					// setStatus(objects[objectId].name + " teleported " + objects[objectId].x + " " + objects[objectId].y + " "  );
+					break;
+				
+				default:
+					break;
+			}
+		}
+	}
+
+	
+	function createTool(type,name,x,y,gifBaseFilename,damage,cost) {
+		console.log("@ createTool :" + name);
+		objects.push(tempObject = Object.create(Tool));
+		var tempID = (Object.keys(objects).length) - 1;
+		var tempObject = objects[tempID];
+		tempObject.id = tempID;
+		// X
+		if (x) {
+			tempObject.x = x;
+		}
+		else {
+			tempObject.x = 0;
+		}
+		// Y
+		if (y) {
+			tempObject.y = y;
+		}
+		else {
+			tempObject.y = 0;
+		}
+		// NAME
+		if (name) {
+			tempObject.name = name;
+		}
+		else {
+			tempObject.name = "none";
+		}
+		// TYPE
+		if (type) {
+			tempObject.type = type;
+		}
+		else {
+			tempObject.type = "character";
+		}
+		// DAMAGE
+		if (damage) {
+			tempObject.damage = damage;
+		}
+		else {
+			tempObject.damage = 0;
+		}
+		// COST
+		if (cost) {
+			tempObject.cost = cost;
+		}
+		else {
+			tempObject.cost = 0;
+		}
+		tempObject.setOldLocation(tempObject.x,tempObject.y);
+		if (gifBaseFilename != "") {
+			tempObject.symbolFront = "<img class=\"" + tempObject.type + "\" id=\"object_" + tempID + "\" title=\"object_" + tempID + "\" src=\"" + gifBaseFilename + "-front.gif\" />";
+			//tempObject.symbolBack = "<img class=\"character\" id=\"object_" + tempID + "\" title=\"object_" + tempID + "\" src=\"" + gifBaseFilename + "-back.gif\" />";
+			tempObject.symbol = tempObject.symbolFront;
+		}
+		console.log(tempObject);
+		World.insertObjectAtLocation(tempObject,tempObject.getLocation());
+		gameboard.updateLocationDisplay(tempObject.getLocation());
+		tempObject = null;
+		return tempID;
+	}
+	
+	function createCharacter (type,name,x,y,gifBaseFilename,cash,strength,intelligence,dexterity,species) {
+		console.log("@ createCharacter :" + name);
+		objects.push(tempObject = Object.create(Character));
+		var tempID = (Object.keys(objects).length) - 1;
+		var tempObject = objects[tempID];
+		tempObject.id = tempID;
+		// X
+		if (x) {
+			tempObject.x = x;
+		}
+		else {
+			tempObject.x = 0;
+		}
+		// Y
+		if (y) {
+			tempObject.y = y;
+		}
+		else {
+			tempObject.y = 0;
+		}
+		// NAME
+		if (name) {
+			tempObject.name = name;
+		}
+		else {
+			tempObject.name = "none";
+		}
+		// TYPE
+		if (type) {
+			tempObject.type = type;
+		}
+		else {
+			tempObject.type = "character";
+		}
+		// CASH
+		if (cash) {
+			tempObject.cash = cash;
+		}
+		else {
+			tempObject.cash = 0;
+		}
+		// STRENGTH
+		if (strength) {
+			tempObject.strength = strength;
+		}
+		else {
+			tempObject.strength = 5;
+		}
+		// INTELLIGENCE
+		if (intelligence) {
+			tempObject.intelligence = intelligence;
+		}
+		else {
+			tempObject.intelligence = 5;
+		}
+		// DEXTERITY
+		if (dexterity) {
+			tempObject.dexterity = dexterity;
+		}
+		else {
+			tempObject.dexterity = 5;
+		}
+		tempObject.setOldLocation(tempObject.x,tempObject.y);
+		if (gifBaseFilename != "") {
+			tempObject.symbolFront = "<img class=\"character\" id=\"object_" + tempID + "\" title=\"object_" + tempID + "\" src=\"" + gifBaseFilename + "-front.gif\" />";
+			tempObject.symbolBack = "<img class=\"character\" id=\"object_" + tempID + "\" title=\"object_" + tempID + "\" src=\"" + gifBaseFilename + "-back.gif\" />";
+			tempObject.symbol = tempObject.symbolFront;
+		}
+		World.insertObjectAtLocation(tempObject,tempObject.getLocation());
+		gameboard.updateLocationDisplay(tempObject.getLocation());
+		tempObject = null;
+		return tempID;
+	}
+	
+	function setStatus(textSent) {
+		document.getElementById("status").innerHTML = textSent;
+		return;
+	}
+	
+	function setScore(textSent) {
+		document.getElementById("score").innerHTML = textSent;
+		return;
+	}
+	
+	function appendStatus(textSent) {
+		document.getElementById("status").innerHTML += textSent;
+		return;
+	}
+	
+
+	// FUNCTION RECEIVES IDS FOR AN OBJECT AND ITS TARGET.
+	// IF NO TARGET IS SPECIFIED, IT IS ASSUMED THAT THE TARGET WILL
+	// BE THE OBJECT'S DESTINATION SETTING.
+	function moveUDLRTowardTarget(objectSentId,targetId) {
+	//console.log("@ moveUDLRTowardTarget: " + objects[objectSentId].name + " -> " + objects[targetId].name);
+		//console.log("Destination: " + objects[objectSentId].destination + " targetID: " + targetId)
+		// RANDOMLY DO EITHER X MOVE OR Y MOVE, BUT NOT BOTH
+		var randomDraw = 0;
+		var tempOutput="";
+		
+		// IF A targetId HAS BEEN SENT USE THE COORDINATES OF THE TARGET OBJECT
+		if (targetId) {
+			//console.log("GOT HERE 1");
+			var targetX = objects[targetId].x;
+			var targetY = objects[targetId].y;
+			//console.log("targetID = " + targetId);
+		}
+		// IF THERE WAS NO targetId SENT, 
+		// AND THE OBJECT HAS A SET DESTINATION,
+		// DO THIS
+		else if (objects[objectSentId].destination != "") {
+		//console.log("GOT HERE 2");
+		 //console.log("NO DESTINATION for " + objects[objectSentId].name);
+
+			var locationArray = World.getXYUsingLocation(objects[objectSentId].destination);
+			targetX = locationArray[0];
+			targetY = locationArray[1];
+			var tempNewLocation = "x" + targetX + "y" + targetY;
+			// IF THE OBJECT IS AT ITS DESTINATION LOCATION, RESET DESTINATION
+			if (objects[objectSentId].getLocation() == objects[objectSentId].destination) {
+			// console.log("GOT HERE 2.a");
+				// console.log("Arrived at destination: " + objects[objectSentId].name);
+				objects[objectSentId].destination = "";
+			}
+			// IF THE OBJECT IS ADJACENT TO ITS DESTINATION,
+			// AND THE DESTINATION IS A BLOCKAGE,
+			// DELETE THE DESTINATION
+			else if ((World.distanceBetweenCoordinates(objects[objectSentId].x,objects[objectSentId].y,targetX,targetY) ==1) && (World.checkForBlockagesAtLocation(tempNewLocation) != "")) {
+				console.log("GOT HERE 2.b");
+				objects[objectSentId].destination = "";
+				console.log("BLOCKED: Object cannot reach destination: DELETE destination for " + objects[objectSentId].name);
+			}
+			// IF THE OBJECT HASN'T REACHED ITS DESTINATION, DO THIS
+			else {
+				// console.log("GOT HERE 2.c");
+
+				
+			}
+			if (objectSentId == 0) { 	
+				console.log(tempOutput);
+			}
+			// console.log ("@ moveUDLRTowardTarget: " + objects[objectSentId].name + " should move toward " + objects[objectSentId].destination + "[" + targetX + "," + targetY + "]");
+		}
+		// IF THE TARGET WAS NOT SET, AND THERE IS NO SET DESTINATION, DO THIS
+		else {
+			console.log("GOT HERE 3");
+			console.log ("@ moveUDLRTowardTarget: SOMETHING WRONG");
+		}
+		// console.log("GOT HERE 4");
+		
+
+		//var bothAxisDifferent = false;
+		// IF BOTH BOTH AXIS ARE DIFFERENT BETWEEN OBJECT AND TARGET 
+		// (MEANING NOT SHARING THE X AXIS OR THE Y AXIS),
+		// THEN DO THIS
+		if ((Math.abs(objects[objectSentId].x - targetX) != 0) && (Math.abs(objects[objectSentId].y - targetY) != 0)) {
+			randomDraw = Math.floor(Math.random() * 2);			
+		}
+		// IF RANDOM DRAW IS CHOSEN TO BE ZERO (OR IS DEFAULT ZERO)
+		// AND X AXIS IS DIFFERENT
+		// MOVE LEFT
+		if (objects[objectSentId].x > targetX && randomDraw == 0) {
+			//objects[objectSentId].x -= 1;
+			newX = objects[objectSentId].x -1;
+			newY = objects[objectSentId].y;
+			// World.moveObject(objects[objectSentId],newX,newY);
+		}
+		// MOVE RIGHT
+		else if (objects[objectSentId].x < targetX && randomDraw == 0) {
+			//objects[objectSentId].x += 1;
+			newX = objects[objectSentId].x +1;
+			newY = objects[objectSentId].y;
+			// World.moveObject(objects[objectSentId],newX,newY);
+		}
+		// IF NEITHER LEFT OR RIGHT(IT DOESN'T MATTER WHAT randomDraw IS)
+		// AND Y AXIS IS DIFFERENT
+		// MOVE UP
+		else if (objects[objectSentId].y > targetY) {
+			// objects[objectSentId].y -= 1;
+			newX = objects[objectSentId].x;
+			newY = objects[objectSentId].y - 1;
+			// World.moveObject(objects[objectSentId],newX,newY);
+		}
+		// MOVE DOWN
+		else if (objects[objectSentId].y < targetY) {
+			// objects[objectSentId].y += 1;
+			newX = objects[objectSentId].x;
+			newY = objects[objectSentId].y + 1;
+			// World.moveObject(objects[objectSentId],newX,newY);
+		}
+		var tempNewLocation = "x" + newX + "y" + newY;
+		// console.log(objects[objectSentId].getOldLocation() + " v. " + tempNewLocation);
+		newDirectionX = newX - objects[objectSentId].x;
+		newDirectionY = newY - objects[objectSentId].y;
+		var outOfBounds = World.checkBoundaries({x:newX,y:newY});
+		if (outOfBounds == false) {
+			if (World.checkForBlockagesAtLocation(tempNewLocation) == "") {
+				World.moveObject(objects[objectSentId],newX,newY);
+			}
+			else {
+				//console.log("BLOCKED! " + World.checkForBlockagesAtLocation(tempNewLocation));
+				highlightObjectBorder(objects[objectSentId],newDirectionX,newDirectionY,"red");
+				moveRandom(objects[objectSentId].id);
+			}
+		}
+		else {
+			highlightObjectBorder(objects[objectSentId],newDirectionX,newDirectionY,"black");
+		}
+		
+		// DESTINATION: 
+		// IF OBJECT HAS MOVED TO ITS DESTINATION, REMOVE THE DESTINATION
+		if (objects[objectSentId].destination == objects[objectSentId].getLocation()) {
+			objects[objectSentId].destination = "";
+		}
+			
+		// CHECK FOR INTERACTION WITH SPECIAL OBJECT
+		var checkForSpecialsId = World.checkForSpecialsAtLocation(objects[objectSentId].getLocation());
+		if (checkForSpecialsId > 0) {
+			console.log("SPECIALS MATCH: " + checkForSpecialsId );
+			Specials.doAction(objectSentId,checkForSpecialsId);
+		}
+		// TEST OUTPUT
+		// setStatus(objects[objectSentId].print());
+		
+		// SUBTRACT FROM HEALTH
+		objects[objectSentId].adjustHealthBy(-.5);
+		
+		return;
+	}
+
+	// THIS FUNCTION CAN SORT OBJECTS ACCORDING TO A CERTAIN PROPERTY
+	// EX. myArrayOfObjects ({lastName:value,firstName:value,age:value})
+	// USAGE: myArrayOfObjexts.sort(dynamicSort("lastName"));
+	function dynamicSort(property) {
+		var sortOrder = 1;
+		if(property[0] === "-") {
+			sortOrder = -1;
+			property = property.substr(1);
+		}
+		return function (a,b) {
+			var result = (a[property] < b[property]) ? -1 : (a[property] > b[property]) ? 1 : 0;
+			return result * sortOrder;
+		}
+	}
+	
+	
+	// THIS IS THE MAIN ACTION FUNCTION.
+	// HERE A PLAYER WILL CHOOSE AN ACTION BASED ON CIRCUMSTANCES AND PERHAPS CHANCE
+	// ACTIONS COULD INCLUDE: MOVEMENT, PICKING UP & DROPPING ITEMS,
+	//  ATTACKING, GATHERING FOOD, HELPING OTHERS
+	function doAction(objectSentId,radiusSent) {
+		/*
+		var rect = document.getElementById("object_" + objectSentId).getBoundingClientRect();
+		console.log(objects[objectSentId].name + ": " + rect.top + "," + rect.right + "," + rect.bottom + "," + rect.left);
+		var pointX = Math.floor(rect.right- (rect.right-rect.left)/2);
+		var pointY = Math.floor(rect.bottom- (rect.bottom-rect.top)/2);
+		console.log(pointX + " " + pointY);
+		*/
+		// TEST VALUE
+		// objectSentId = 2;
+		var radius = 3;
+		if (radiusSent > -1) {
+			radius = radiusSent;
+		}
+		var maxPriority = 20;
+		var tempPriority = 20;
+		
+		var nearbyObjectsArray = World.getArrayOfNearbyObjects(objects[objectSentId].getLocation(),radius);
+		// console.log("neabyObjectsArray: " + nearbyObjectsArray);
+		
+		// MAKE AN ARRAY OF POSSIBLE OPTIONS
+		// optionsArray[targetID,optionName,priority];
+		// PRIORITY 1 IS THE HIGHEST, 20 IS THE LOWEST
+		var optionsArray = new Array();
+		
+		// LOWEST PRIORITY OPTION: moveRandom
+		optionsArray.push({targetID:-1,optionName:"moveRandom",priority:20});
+		
+		// IF THE OBJECT IS LOW ON ENERGY, THEN REMOVE DESTINATION LOCATION
+		if (objects[objectSentId].health < 2) {
+			objects[objectSentId].destination = "";
+			console.log("TOO HUNGRY: Kill destination" + objects[objectSentId].name);
+		}
+		
+
+		
+		
+		// LOOP THROUGH ARRAY OF NEARBY OBJECTS .id && .distance
+		nearbyObjectsArray.forEach(function(arrayItem) {
+			// SKIP OBJECT'S SELF
+			if (objectSentId != arrayItem.id) {
+				// IF THE OBJECT IS WITHIN SENSING AREA DO THESE OPTIONS
+				if (arrayItem.distance <= radius) {
+					//console.log(objects[arrayItem.id].type);
+					// IF IT'S A "prize" TYPE, THEN MAYBE DO THIS
+					if (objects[arrayItem.id].type=="prize") {	
+						optionsArray.push({targetID:arrayItem.id,optionName:"getPrize",priority:5});
+					}
+					// IF IT'S A "plant" TYPE, THEN MAYBE DO THIS
+					// console.log(objects[objectSentId].name + "(" + objects[objectSentId].healthAdjusted + "/" + objects[objectSentId].health + " = " + (Math.floor(maxPriority * (objects[objectSentId].healthAdjusted/objects[objectSentId].health)) + 1) +  ")");
+					if ((objects[arrayItem.id].type=="plant") && ((objects[objectSentId].healthAdjusted / objects[objectSentId].health) < .50)) { 
+						// console.log(objects[objectSentId].name + " goes to a plant .");
+						// tempPriority = maxPriority - (Math.floor(maxPriority * (objects[objectSentId].healthAdjusted/objects[objectSentId].health)) + 1);
+						// optionsArray.push({targetID:arrayItem.id,optionName:"goToPlant",priority:tempPriority});
+						optionsArray.push({targetID:arrayItem.id,optionName:"goToPlant",priority:10});
+					}
+				}
+				
+				// IF THE OBJECT IS ADJACENT TO THIS LOCATION, MAYBE DO THIS
+				if (arrayItem.distance == 1) {
+					// IF IT'S A "plant" TYPE, THEN MAYBE DO THIS
+					if ((objects[arrayItem.id].type=="plant") && ((objects[objectSentId].healthAdjusted / objects[objectSentId].health) < .65)) { 
+						// console.log(objects[objectSentId].name + " can eat from a plant .");
+						optionsArray.push({targetID:arrayItem.id,optionName:"eatFromPlant",priority:5});
+					}
+				}
+				// IF THE OBJECT IS IN THE SAME LOCATION, MAYBE DO THIS
+				if (arrayItem.distance == 0) {
+					//optionsArray.push();
+				}
+			}
+		
+			//console.log(arrayItem.id);
+		});
+		optionsArray.sort(dynamicSort("priority"));
+		
+		// LOOP THROUGH OPTIONS AND PICK ONE
+		for(var i =0; i < optionsArray.length; i++) {
+				//console.log("option #" + i + ": " + optionsArray[i].optionName);
+				
+				// PRIZE: GET PRIZE
+				if (optionsArray[i].optionName == "getPrize") {
+					var dud = moveUDLRTowardTarget(objectSentId,optionsArray[i].targetID);
+					
+					// CHECK FOR COIN COLLISION
+					if (World.checkForCollision(objects[objectSentId],objects[optionsArray[i].targetID])) {
+						objects[objectSentId].cash += objects[optionsArray[i].targetID].cash;
+						World.relocate(objects[optionsArray[i].targetID]);
+						setScore(objects[objectSentId].getSymbol().replace("id=","") + " " + objects[objectSentId].name + " found " + objects[optionsArray[i].targetID].cash + " cash.");
+						highlightObjectBorders(objects[objectSentId],"green");
+						setTimeout(highlightObjectBorders,700,objects[objectSentId],"transparent");
+					}
+					
+					break;
+				}
+				
+				// PLANT: EAT FROM PLANT
+				if (optionsArray[i].optionName == "eatFromPlant") {
+					//if (optionsArray[i].targetID) {
+						// console.log(objects[objectSentId].name + " EATS from a plant .");
+						objects[objectSentId].adjustHealthBy(100);
+						break;
+					//}
+				}
+				
+				// PLANT: GO TO PLANT
+				if (optionsArray[i].optionName == "goToPlant") {
+					//if (optionsArray[i].targetID) {
+						var dud = moveUDLRTowardTarget(objectSentId,optionsArray[i].targetID);
+						// console.log(objects[objectSentId].name + " GOES TO from a plant .");
+						break;
+					//}
+				}
+				
+				// DESTINATION: BASED ON OBJECT'S PRE-SET DESTINATION
+				// IF CHARACTER IS NEXT TO DESTINATION, AND THE DESTINATION IS BLOCKED, DROP THE DESTINATION
+				if ((objects[objectSentId].destination).trim() != "") {
+					var oldLocationArray = World.getXYUsingLocation(objects[objectSentId].getOldLocation());
+					var oldLocation = "x" + oldLocationArray[0] + "y" + oldLocationArray[1];
+					var oldRect = document.getElementById(oldLocation).getBoundingClientRect();
+					var oldPointX = Math.floor(oldRect.right- (oldRect.right-oldRect.left)/2);
+					var oldPointY = Math.floor(oldRect.bottom- (oldRect.bottom-oldRect.top)/2);
+					var receivedDestination = objects[objectSentId].destination;
+					
+					locationArray = World.getXYUsingLocation(objects[objectSentId].destination);
+					var destinationLocation = "x" + locationArray[0] + "y" + locationArray[1];
+					var targetRect = document.getElementById(destinationLocation).getBoundingClientRect();
+					var targetPointX = Math.floor(targetRect.right- (targetRect.right-targetRect.left)/2);
+					var targetPointY = Math.floor(targetRect.bottom- (targetRect.bottom-targetRect.top)/2);
+					
+					// drawLine (oldPointX,oldPointY,targetPointX,targetPointY,"white",2);
+					// GET DESTINATION XY
+					try {
+						
+						var dud = moveUDLRTowardTarget(objectSentId);
+						
+						var everythingLeft = document.getElementById("everything").offsetLeft ;
+						var everythingTop = document.getElementById("everything").offsetTop ;
+						//console.log("everythingLeft: " + everythingLeft);
+						
+						// drawLine(fromX,fromY,toX,toY,objectSent.color);
+						// GET OBJECT XY
+						var newLocationArray = World.getXYUsingLocation(objects[objectSentId].getLocation());
+						//var objectRect = document.getElementById("object_" + objectSentId).getBoundingClientRect();
+						//console.log(objects[objectSentId].name + ": " + objectRect.top + "," + objectRect.right + "," + objectRect.bottom + "," + objectRect.left);
+						var newLocation = "x" + newLocationArray[0] + "y" + newLocationArray[1];
+						var objectRect = document.getElementById(newLocation).getBoundingClientRect();
+						var pointX = Math.floor(objectRect.right- (objectRect.right-objectRect.left)/2) - everythingLeft;
+						var pointY = Math.floor(objectRect.bottom- (objectRect.bottom-objectRect.top)/2) - everythingTop;
+						
+						// GET DESTINATION XY
+						// IF DESTINATION WASN'T CLEARED ALREADY
+						if (objects[objectSentId].destination != "") { 
+							locationArray = World.getXYUsingLocation(objects[objectSentId].destination);
+							vdestinationLocation = "x" + locationArray[0] + "y" + locationArray[1];
+							targetRect = document.getElementById(destinationLocation).getBoundingClientRect();
+							targetPointX = Math.floor(targetRect.right- (targetRect.right-targetRect.left)/2) - everythingLeft;
+							targetPointY = Math.floor(targetRect.bottom- (targetRect.bottom-targetRect.top)/2) - everythingTop;
+							// console.log("DRAW OLD LINE: " + oldPointX,oldPointY,targetPointX,targetPointY);
+							// console.log("DRAW LINE: " + pointX,pointY,targetPointX,targetPointY);
+
+							drawLine (pointX,pointY,targetPointX,targetPointY,"lightblue",1,true);
+							setTimeout(function() { drawLine (pointX,pointY,targetPointX,targetPointY,"white", 2,false); },500);
+						}
+					}
+					catch(e) {
+						console.log("ERROR: " + e + " name: " + objects[objectSentId].name + " newLocation: " + newLocation + " oldLocationArray[]: " + oldLocationArray + " oldLocation: " + oldLocation + " destinationLocation: " + destinationLocation + " .destination: '" + objects[objectSentId].destination + "' receivedDestination:" + receivedDestination );
+					}
+					break;
+				}
+				
+				if (optionsArray[i].optionName == "moveRandom") {
+				// console.log(objects[objectSentId].name + " MOVES RANDOM .");
+					var dud = moveRandom(objectSentId);
+					break;
+				}
+
+		}
+		
+		
+		// console.log(objects[objectSentId].name + " nearbyObjects: " + nearbyObjectsArray);
+/*		for (i=0; i<nearbyObjectsArray.length; i++) {
+			console.log(nearbyObjectsArray["id"].toString() + " " + nearbyObjectsArray["distance"]);
+		}
+		var tempArray = [];
+		tempArray = this.getArrayOfNearbyObjects(boardLocationObject.id,3)
+		console.log("ARRAY OF " + tempArray.length + " NEARBY OBJECTS: " + tempArray);
+*/
+		
+
+		/*for (var key in nearbyObjectsArray.messages) {
+			var obj = nearbyObjectsArray.messages[key];
+			console.log(key);
+		}
+		*/
+		
+		//moveRandom(objectSentId);
+	}
+	
+	
+	
+	
+	// FUNCTION MOVES THE OBJECT IN A RANDOM DIRECTION
+	// (POSSIBLY IN A DIAGONAL DIRECTION)
+	function moveRandom(objectSentId) {
+		objectSent = objects[objectSentId];
+		//console.log("----- @ moveRandom (" + objectSentId + ") -----");
+		//console.log(objectSent);
+		//oldLocation = objectSent.getLocation();
+		objectSent.setOldLocation(objectSent.x,objectSent.y);
+		// RANDOMLY DO EITHER X MOVE OR Y MOVE, BUT NOT BOTH
+		var randomDraw = 0;
+		
+		// IF NO SET DESTINATION, MAYBE SET A DESTINATION
+		randomDraw = Math.floor(Math.random() * 10);
+		if ((randomDraw == 9) && (objectSent.destination == "")) {
+			var destinationX = Math.floor(Math.random() * World.width);
+			var destinationY = Math.floor(Math.random() * World.height);
+			objectSent.destination = "x" + destinationX + "y" + destinationY;
+			// setStatus(objectSent.name + " has a new destination " + objectSent.destination);
+		}
+		
+		// var bothAxisDifferent = false;
+		randomDraw = Math.floor(Math.random() * 2);
+		if (randomDraw == 0) {
+			var newDirectionX = Math.floor(Math.random() * 3)-1;
+			var newDirectionY = 0;
+		}
+		else {
+			var newDirectionY = Math.floor(Math.random() * 3)-1;
+			var newDirectionX = 0;
+		}
+		var newX = objectSent.x + newDirectionX;
+		var newY = objectSent.y + newDirectionY;
+		var tempNewLocation = "x" + newX + "y" + newY;
+
+		// IF MOVE IS WITHIN BOUNDARIES, GO AHEAD AND CHANGE LOCATION
+		var outOfBounds = World.checkBoundaries({x:newX,y:newY});
+		if (outOfBounds == false) {
+			if (World.checkForBlockagesAtLocation(tempNewLocation) == "") {
+				World.moveObject(objectSent,newX,newY);
+			}
+			else {
+				//console.log("BLOCKED! " + World.checkForBlockagesAtLocation(tempNewLocation));
+				highlightObjectBorder(objectSent,newDirectionX,newDirectionY,"red");
+			}
+		}
+		else {
+			highlightObjectBorder(objectSent,newDirectionX,newDirectionY,"black");
+		}
+		
+		// CHECK FOR INTERACTION WITH SPECIAL OBJECT
+		var checkForSpecialsId = World.checkForSpecialsAtLocation(objects[objectSentId].getLocation());
+		if (checkForSpecialsId > 0) {
+			console.log("SPECIALS MATCH: " + checkForSpecialsId );
+			Specials.doAction(objectSentId,checkForSpecialsId);
+		}
+		
+		// SUBTRACT FROM HEALTH
+		objects[objectSentId].adjustHealthBy(-.5);
+		
+		// TEST OUTPUT
+		// setStatus(objectSent.print());
+		return(objectSent.getLocation());
+	}
+	
+	function highlightObjectBorder(objectSent,newDirectionX,newDirectionY,color) {
+		if (newDirectionY < 0) {
+			document.getElementById("object_" + objectSent.id).style.borderTop = "1px dotted " + color;
+		}
+		else  if (newDirectionY > 0) {
+			document.getElementById("object_" + objectSent.id).style.borderBottom = "1px dotted " + color;
+		}
+		if (newDirectionX < 0) {
+			document.getElementById("object_" + objectSent.id).style.borderLeft = "1px dotted " + color;
+		}
+		else  if (newDirectionX > 0) {
+			document.getElementById("object_" + objectSent.id).style.borderRight = "1px dotted " + color;
+		}
+	}
+	
+	function highlightObjectBorders(objectSent,color) {
+		document.getElementById("object_" + objectSent.id).style.border = "1px dotted " + color;
+	}
+
+	
+	// CREATE WALLS
+	
+
+	
+	// CREATE CHARACTERS
+	function createAllCharacters() {
+		//console.log("@ createAllCharacters");
+		var tempID = 0;
+		var tempCash = 0;
+
+		tempID = createCharacter("obstacle","wall",25,10,"./characters/obstacle-wall");
+		tempID = createCharacter("obstacle","wall",25,11,"./characters/obstacle-wall");
+		tempID = createCharacter("obstacle","wall",25,12,"./characters/obstacle-wall");
+		tempID = createCharacter("obstacle","wall",25,13,"./characters/obstacle-wall");
+
+
+		tempID = createCharacter("character","Tubby",0,0,"./characters/tubby-anim");
+		//setInterval(moveUDLRTowardTarget,1800,tempID,25);
+		setInterval(doAction,300,tempID,7);
+		World.relocate(objects[tempID]);
+		
+		tempID = createCharacter("character","Alien",0,0,"./characters/alien-anim");
+		// setInterval("moveRandom(" + objects[tempID].id + ")",2100);
+		//setInterval(moveUDLRTowardTarget,1805,tempID,25);
+		setInterval(doAction,801,tempID,7);
+		World.relocate(objects[tempID]);
+		
+		tempID = createCharacter("character","Red Bot",0,0,"./characters/redbot-anim");
+		// setInterval("moveRandom(" + objects[tempID].id + ")",2200);
+		//setInterval(moveUDLRTowardTarget,1810,tempID,25);
+		setInterval(doAction,802,tempID,7);
+		World.relocate(objects[tempID]);
+		
+		tempID = createCharacter("character","Devil",0,0,"./characters/devil-anim");
+		// setInterval("moveRandom(" + objects[tempID].id + ")",2300);
+		//setInterval(moveUDLRTowardTarget,1815,tempID,25);
+		setInterval(doAction,803,tempID,7);
+		World.relocate(objects[tempID]);
+		
+		tempID = createCharacter("character","Bodybuilder",0,0,"./characters/bodybuilder-anim");
+		// setInterval("moveRandom(" + objects[tempID].id + ")",tempID,2500);
+		//setInterval(moveUDLRTowardTarget,1820,tempID,25);
+		setInterval(doAction,804,tempID,7);
+		World.relocate(objects[tempID]);
+		
+		tempID = createCharacter("character","Skeleton",0,0,"./characters/skeleton-anim");
+		// setInterval("moveRandom(" + objects[tempID].id + ")",1800);
+		//setInterval(moveUDLRTowardTarget,1825,tempID,25);
+		setInterval(doAction,805,tempID,7);
+		World.relocate(objects[tempID]);
+		
+		tempID = createCharacter("character","Beholder",0,0,"./characters/beholder-anim");
+		// setInterval("moveRandom(" + objects[tempID].id + ")",2500);
+		//setInterval(moveUDLRTowardTarget,1830,tempID,25);
+		setInterval(doAction,806,tempID,7);
+		World.relocate(objects[tempID]);
+		
+		tempID = createCharacter("character","Vampire",0,0,"./characters/vampire-anim");
+		// setInterval("moveRandom(" + objects[tempID].id + ")",2500);
+		//setInterval(moveUDLRTowardTarget,1835,tempID,25);
+		setInterval(doAction,807,tempID,7);
+		World.relocate(objects[tempID]);
+		
+		tempID = createCharacter("character","Mummy",0,0,"./characters/mummy-anim");
+		// setInterval("moveRandom(" + objects[tempID].id + ")",2500);
+		//setInterval(moveUDLRTowardTarget,1835,tempID,25);
+		setInterval(doAction,807,tempID,7);
+		World.relocate(objects[tempID]);
+		
+		tempID = createCharacter("character","Angel",0,0,"./characters/angel-anim");
+		// setInterval("moveRandom(" + objects[tempID].id + ")",1500);
+		//setInterval(moveUDLRTowardTarget,1840,tempID,25);
+		setInterval(doAction,808,tempID,7);
+		World.relocate(objects[tempID]);
+		
+		tempID = createCharacter("character","Rat Man",0,0,"./characters/ratman-anim");
+		// setInterval("moveRandom(" + objects[tempID].id + ")",1500);
+		//setInterval(moveUDLRTowardTarget,1845,tempID,25);
+		setInterval(doAction,809,tempID,7);
+		World.relocate(objects[tempID]);
+		
+		tempID = createCharacter("character","Pink Lady",0,0,"./characters/pinklady-anim");
+		// setInterval("moveRandom(" + objects[tempID].id + ")",1500);
+		//setInterval(moveUDLRTowardTarget,1850,tempID,25);
+		setInterval(doAction,810,tempID,7);
+		World.relocate(objects[tempID]);
+		
+		tempID = createCharacter("character","Lady Jogger",0,0,"./characters/ladyjogger-anim");
+		// setInterval("moveRandom(" + objects[tempID].id + ")",1500);
+		//setInterval(moveUDLRTowardTarget,1855,tempID,25);\
+		setInterval(doAction,811,tempID,7);
+		World.relocate(objects[tempID]);
+		
+		tempID = createCharacter("character","Zombie",0,0,"./characters/zombie-anim");
+		// setInterval("moveRandom(" + objects[tempID].id + ")",1500);
+		//setInterval(moveUDLRTowardTarget,1860,tempID,25);
+		setInterval(doAction,812,tempID,7);
+		World.relocate(objects[tempID]);
+		
+		tempID = createCharacter("character","Medic",0,0,"./characters/medic-anim");
+		// setInterval("moveRandom(" + objects[tempID].id + ")",1500);
+		//setInterval(moveUDLRTowardTarget,1860,tempID,25);
+		setInterval(doAction,813,tempID,7);
+		World.relocate(objects[tempID]);
+		
+		// CREATE OBSTACLES
+		
+		for (var i=0;i<5;i++) {
+			tempID = createCharacter("obstacle","rock",2,2,"./characters/obstacle-rock");
+			World.relocate(objects[tempID]);
+		}
+		
+		for (var i=0;i<2;i++) {
+			tempID = createCharacter("obstacle","boulder",2,2,"./characters/obstacle-boulder");
+			World.relocate(objects[tempID]);
+		}
+
+		for (var i=0;i<3;i++) {
+			tempID = createCharacter("obstacle","tree",2,2,"./characters/obstacle-tree");
+			World.relocate(objects[tempID]);
+		}
+		
+		for (var i=0;i<3;i++) {
+			tempID = createCharacter("obstacle","pine tree",2,2,"./characters/obstacle-pinetree");
+			World.relocate(objects[tempID]);
+		}
+		
+		// CREATE LOOSE CASH
+		
+		for (i=0; i<2; i++) {
+			tempCash = 1;
+			tempID = createCharacter("prize","coin",0,0,"./characters/coin-anim",1);
+			//setInterval("moveRandom(" + objects[tempID].id + ")",700);
+			World.relocate(objects[tempID]);
+		}
+		
+		// CREATE SPECIALS
+		
+		for (i=0; i<2; i++) {
+			tempID = createCharacter("special","teleporter",0,0,"./characters/special-teleporter-anim");
+			// setInterval("moveRandom(" + objects[tempID].id + ")",1500);
+			World.relocate(objects[tempID]);
+		}
+		
+		// CREATE TOOLS
+		
+		//createTool(type,name,x,y,gifBaseFilename,damage,cost)
+		tempID = createTool("tool","axe",0,0,"./characters/tool-axe",5,10);
+		//setInterval("moveRandom(" + objects[tempID].id + ")",700);
+		World.relocate(objects[tempID]);
+		
+		//createTool(type,name,x,y,gifBaseFilename,damage,cost)
+		tempID = createTool("tool","sword",0,0,"./characters/tool-sword",10,100);
+		//setInterval("moveRandom(" + objects[tempID].id + ")",700);
+		World.relocate(objects[tempID]);
+		
+		// CREATE FOOD
+		
+		for (i=0; i<1; i++) {
+			tempID = createCharacter("plant","banana tree",0,0,"./characters/plant-banana");
+			// setInterval("moveRandom(" + objects[tempID].id + ")",1500);
+			World.relocate(objects[tempID]);
+		}
+		for (i=0; i<1; i++) {
+			tempID = createCharacter("plant","apple tree",0,0,"./characters/plant-apple");
+			// setInterval("moveRandom(" + objects[tempID].id + ")",1500);
+			World.relocate(objects[tempID]);
+		}
+		
+		for (i=0; i<1; i++) {
+			tempID = createCharacter("plant","food store",0,0,"./characters/food-store");
+			// setInterval("moveRandom(" + objects[tempID].id + ")",1500);
+			World.relocate(objects[tempID]);
+		}
+
+	}
+	//console.log(objects[tempID]);	
+	
+	function drawLine(fromX,fromY,toX,toY,color,lineWidth,dashed) { 
+		// $("#myCanvas").width($("#theBoard").width());
+		//$("#myCanvas").height($("#theBoard").height());
+		if (!lineWidth) {
+			lineWidth = 1;
+		}
+		var c = document.getElementById("myCanvas");
+		ctx = c.getContext("2d");
+		//ctx.clearRect(0,0,1150,660);
+		if (dashed) {
+			ctx.setLineDash([4, 6]);
+		}
+		else {
+			ctx.setLineDash([])
+		}
+		ctx.beginPath();
+		ctx.moveTo(fromX,fromY);
+		ctx.lineTo(toX,toY);
+		ctx.strokeStyle = color;
+		ctx.lineWidth = lineWidth;
+		ctx.stroke();
+		ctx.closePath();
+		ctx.restore;
+	}
+	
+	function drawCircle(x,y,radius,color,lineWidth,dashed) {
+		var c=document.getElementById("myCanvas");
+		var ctx=c.getContext("2d");
+		if (dashed) {
+			ctx.setLineDash([4, 6]);
+		}
+		else {
+			ctx.setLineDash([])
+		}
+		ctx.beginPath();
+		ctx.strokeStyle = color;
+		ctx.lineWidth = lineWidth;
+		ctx.arc(x,y,radius,0,2*Math.PI);
+		ctx.stroke();
+		ctx.closePath();
+		ctx.restore;
+	}
+
+</script>
+
+</head>
+<body>
+
+<div id="everything">
+	<canvas id="myCanvas"  width="300" height="300" style="position:absolute;">
+	</canvas>
+	<div id="main"></div>
+	
+	<div id="menu"></div>
+	<div id="score"></div>
+	<div id="status"></div>
+	<div style="clear:both;"></div>
+</div>
+<script>
+// MAIN ROUTINE
+	World.create(35,20);
+	gameboard = Gameboard;
+	gameboard.display();
+	createAllCharacters();
+	// window.alert(objects[0].id);
+	gameboard.display();
+	console.log("-- end scripts--");
+	// drawLine(fromX,fromY,toX,toY,objectSent.color);
+	// drawLine (0,0,100,100,"pink");
+
+	console.log("main width: " + document.getElementById("main").offsetWidth);
+	var tempWidth = document.getElementById("main").offsetWidth;
+	document.getElementById("myCanvas").width = tempWidth;
+	var tempHeight = document.getElementById("main").offsetHeight;
+	document.getElementById("myCanvas").height = tempHeight;
+	console.log("offset height: " + document.getElementById("myCanvas").height);
+	console.log("offset width: " + document.getElementById("myCanvas").width);
+
+	
+	// TEST
+	// console.log("STEP 1");
+	// var tempLocation = moveRandom(objects[0]);
+	// console.log("STEP 2");
+	// var tempUpdateHTML = gameboard.updateLocationDisplay(tempLocation)
+	// console.log("STEP 3");
+	// setStatus(tempUpdateHTML);
+	// window.alert(tempUpdateHTML);
+</script>
+</body>
+</html>
